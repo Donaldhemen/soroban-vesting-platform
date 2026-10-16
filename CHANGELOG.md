@@ -20,7 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-- contracts/token/src/lib.rs: `transfer_admin()` now emits an `("admXfer",)`
   event with payload `(old_admin: Address, new_admin: Address)` (#101).
   Added `EVT_ADM_XFER` constant (`symbol_short!("admXfer")`), matching the
   vesting contract's pattern for consistency. Off-chain systems monitoring admin
