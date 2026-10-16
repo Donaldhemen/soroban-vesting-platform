@@ -461,6 +461,7 @@ impl VestingContract {
         let id: u64 = env.storage().instance().get(&SCHED_ID).unwrap_or(0);
         let next_id = id + 1;
 
+        let token_address = params.token_address.clone();
         let schedule = VestingSchedule {
             id: next_id,
             beneficiary: params.beneficiary.clone(),
@@ -502,7 +503,12 @@ impl VestingContract {
 
         env.events().publish(
             (EVT_CREATED,),
-            (next_id, params.beneficiary, params.total_amount),
+            (
+                next_id,
+                params.beneficiary,
+                params.total_amount,
+                token_address,
+            ),
         );
 
         next_id
@@ -1296,6 +1302,7 @@ mod tests {
 
     #[test]
     fn test_event_created() {
+        use soroban_sdk::IntoVal;
         let (env, vesting_id, _admin, beneficiary, funder) = setup();
         let token = new_token(&env, &funder, 100_000);
         let vesting = VestingContractClient::new(&env, &vesting_id);
@@ -1304,23 +1311,28 @@ mod tests {
         let id = vesting.create_schedule(&CreateScheduleParams {
             from: funder.clone(),
             beneficiary: beneficiary.clone(),
-            token_address: token,
+            token_address: token.clone(),
             total_amount: 100_000,
             start_time: start,
             cliff_duration: 0,
             total_duration: 100,
         });
 
-        let events = env.events().all();
-        // Find the "created" event (last one published by vesting contract)
-        let found = !env
-            .events()
-            .all()
-            .filter_by_contract(&vesting_id)
-            .events()
-            .is_empty();
-        assert!(found, "expected 'created' event, got: {:?}", events);
-        let _ = id;
+        // The "created" event must include token_address as the fourth field so
+        // off-chain indexers tracking multiple token types can identify which
+        // token a schedule locks without an extra RPC call.
+        assert_eq!(
+            env.events().all().filter_by_contract(&vesting_id),
+            soroban_sdk::vec![
+                &env,
+                (
+                    vesting_id.clone(),
+                    (symbol_short!("created"),).into_val(&env),
+                    (id, beneficiary.clone(), 100_000i128, token.clone()).into_val(&env),
+                )
+            ],
+            "expected 'created' event with (id, beneficiary, total_amount, token_address)"
+        );
     }
 
     // ── events: claim emits "claimed" ─────────────────────────────────────────

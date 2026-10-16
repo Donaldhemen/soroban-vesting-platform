@@ -53,7 +53,7 @@ Authorization: admin.
 - `"start_time + total_duration overflows u64"` — arithmetic overflow check
 - `"contract is paused"` — contract is paused
 
-**Events:** `("created",)` → `(id: u64, beneficiary: Address, total_amount: i128)`
+**Events:** `("created",)` → `(id: u64, beneficiary: Address, total_amount: i128, token_address: Address)`
 
 ---
 
@@ -245,7 +245,7 @@ See [docs/ttl.md](../../docs/ttl.md).
 
 | Topic | Data | Emitted by |
 |-------|------|-----------|
-| `("created",)` | `(id, beneficiary, total_amount)` | `create_schedule` |
+| `("created",)` | `(id, beneficiary, total_amount, token_address)` | `create_schedule` |
 | `("claimed",)` | `(schedule_id, beneficiary, amount)` | `claim` |
 | `("revoked",)` | `(schedule_id, unvested)` | `revoke` |
 | `("paused",)` | `()` | `pause` |
