@@ -226,6 +226,23 @@ impl MultisigContract {
     }
 
     /// Confirm a pending proposal. Caller must be an owner.
+    ///
+    /// Adds `owner`'s confirmation to the proposal identified by
+    /// `proposal_id`. Each owner may confirm at most once. Increments
+    /// `confirmation_count` on the stored `ProposalData`.
+    ///
+    /// # Authorization
+    /// Requires `owner.require_auth()`. `owner` must be in the current owner
+    /// set or the call panics with `"not an owner"`.
+    ///
+    /// # Panics
+    /// - `"proposal not found"` — `proposal_id` does not exist in storage.
+    /// - `"proposal not pending"` — proposal status is `Executed` or `Cancelled`.
+    /// - `"already confirmed"` — `owner` has already confirmed this proposal.
+    /// - `"not an owner"` — `owner` is not in the current owner set.
+    ///
+    /// # Events
+    /// Emits `("confirmed",)` → `(proposal_id: u64, owner: Address)`.
     pub fn confirm(env: Env, owner: Address, proposal_id: u64) {
         Self::bump_instance(&env);
         owner.require_auth();
@@ -271,6 +288,23 @@ impl MultisigContract {
     }
 
     /// Revoke own confirmation from a pending proposal.
+    ///
+    /// Removes `owner`'s confirmation from the proposal identified by
+    /// `proposal_id` and decrements `confirmation_count`. The owner may
+    /// re-confirm later if the proposal is still pending.
+    ///
+    /// # Authorization
+    /// Requires `owner.require_auth()`. `owner` must be in the current owner
+    /// set.
+    ///
+    /// # Panics
+    /// - `"proposal not found"` — `proposal_id` does not exist in storage.
+    /// - `"proposal not pending"` — proposal status is `Executed` or `Cancelled`.
+    /// - `"not confirmed"` — `owner` has not yet confirmed this proposal.
+    /// - `"not an owner"` — `owner` is not in the current owner set.
+    ///
+    /// # Events
+    /// Emits `("revoked",)` → `(proposal_id: u64, owner: Address)`.
     pub fn revoke_confirmation(env: Env, owner: Address, proposal_id: u64) {
         Self::bump_instance(&env);
         owner.require_auth();
@@ -373,6 +407,23 @@ impl MultisigContract {
     }
 
     /// Cancel a pending proposal. Only the original proposer may cancel.
+    ///
+    /// Sets the proposal status to `Cancelled`. A cancelled proposal cannot
+    /// be confirmed or executed. Existing confirmations are preserved in
+    /// storage but are inert.
+    ///
+    /// # Authorization
+    /// Requires `caller.require_auth()`. `caller` must be both an owner and
+    /// the proposer of the specified proposal.
+    ///
+    /// # Panics
+    /// - `"proposal not found"` — `proposal_id` does not exist in storage.
+    /// - `"proposal not pending"` — proposal is already `Executed` or `Cancelled`.
+    /// - `"only proposer can cancel"` — `caller` is not the original proposer.
+    /// - `"not an owner"` — `caller` is not in the current owner set.
+    ///
+    /// # Events
+    /// Emits `("cancelled",)` → `proposal_id: u64`.
     pub fn cancel(env: Env, caller: Address, proposal_id: u64) {
         Self::bump_instance(&env);
         caller.require_auth();
@@ -407,6 +458,12 @@ impl MultisigContract {
 
     // ── Read ────────────────────────────────────────────────────────────────
 
+    /// Return the full `ProposalData` struct for a given proposal ID.
+    ///
+    /// Read-only — does not extend TTL or write any storage.
+    ///
+    /// # Panics
+    /// - `"not found"` — `proposal_id` does not exist in storage.
     pub fn get_proposal(env: Env, proposal_id: u64) -> ProposalData {
         env.storage()
             .persistent()
@@ -414,6 +471,10 @@ impl MultisigContract {
             .expect("not found")
     }
 
+    /// Return the current list of owner addresses.
+    ///
+    /// The list is ordered by insertion time (append-only). Read-only —
+    /// does not extend TTL or write any storage.
     pub fn get_owners(env: Env) -> Vec<Address> {
         env.storage()
             .instance()
@@ -421,14 +482,27 @@ impl MultisigContract {
             .unwrap_or(Vec::new(&env))
     }
 
+    /// Return the current confirmation threshold.
+    ///
+    /// A proposal must reach this many confirmations before `execute()` may
+    /// be called. Read-only — does not extend TTL or write any storage.
     pub fn get_threshold(env: Env) -> u32 {
         env.storage().instance().get(&THRESHOLD).unwrap_or(0)
     }
 
+    /// Return the total number of proposals ever submitted (the last assigned ID).
+    ///
+    /// IDs start at 1 and increment by 1 on each `submit()` call, so this
+    /// also doubles as the most-recent proposal ID. Read-only — does not
+    /// extend TTL or write any storage.
     pub fn proposal_count(env: Env) -> u64 {
         env.storage().instance().get(&PROP_COUNT).unwrap_or(0)
     }
 
+    /// Return `true` if `owner` has confirmed the proposal identified by
+    /// `proposal_id`, `false` otherwise.
+    ///
+    /// Read-only — does not extend TTL or write any storage.
     pub fn has_confirmed(env: Env, proposal_id: u64, owner: Address) -> bool {
         env.storage()
             .persistent()
@@ -436,6 +510,10 @@ impl MultisigContract {
             .unwrap_or(false)
     }
 
+    /// Return `true` if `address` is currently in the owner set, `false`
+    /// otherwise.
+    ///
+    /// Read-only — does not extend TTL or write any storage.
     pub fn is_owner(env: Env, address: Address) -> bool {
         let owners: Vec<Address> = env
             .storage()
