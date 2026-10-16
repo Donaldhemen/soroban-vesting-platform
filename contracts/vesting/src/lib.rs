@@ -501,6 +501,10 @@ impl VestingContract {
             return schedule.total_amount;
         }
         // saturating_mul prevents i128 overflow for very large amounts × elapsed.
+        // Note: integer division truncates toward zero (floor division).
+        // Dust — the fractional remainder — accumulates in the contract and is
+        // only released when elapsed >= total_duration (the branch above).
+        // See README "Rounding behavior" for a worked example.
         i128::from(elapsed).saturating_mul(schedule.total_amount)
             / i128::from(schedule.total_duration)
     }

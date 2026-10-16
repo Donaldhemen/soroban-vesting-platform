@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 2026-10-16
+
+- contracts/vesting/README.md: "Rounding behavior" section (#96). Documents
+  that `vested_amount` uses integer (floor) division
+  (`elapsed * total_amount / total_duration`), explains dust accumulation until
+  schedule completion, includes a worked example (99-token / 100-second
+  schedule), and adds integrator notes. Linked from the `vested_amount` source
+  comment.
+
+- contracts/vesting/src/lib.rs: inline `// Note:` comment in `vested_amount()`
+  (#96). Points to the README "Rounding behavior" section and explains that the
+  fractional remainder (dust) is released only when `elapsed >= total_duration`.
+
 ### Added — 2026-10-15
 
 - contracts/vesting: `batch_create_schedule(env, params: Vec<CreateScheduleParams>) -> Vec<u64>`
