@@ -122,6 +122,7 @@ const EVT_REVOKED: Symbol = symbol_short!("revoked");
 const EVT_PAUSED: Symbol = symbol_short!("paused");
 const EVT_UNPAUSED: Symbol = symbol_short!("unpaused");
 const EVT_ADM_XFER: Symbol = symbol_short!("admXfer");
+const EVT_BEN_XFER: Symbol = symbol_short!("benXfer");
 
 // ─── Contract ──────────────────────────────────────────────────────────────
 
@@ -329,6 +330,92 @@ impl VestingContract {
         env.storage().instance().set(&ADMIN, &new_admin);
         env.events()
             .publish((EVT_ADM_XFER,), (old_admin, new_admin));
+    }
+
+    // ── Beneficiary transfer ──────────────────────────────────────────────
+
+    /// Transfer a vesting schedule from the current beneficiary to a new one.
+    ///
+    /// The current beneficiary must authorise the call.  The schedule must be
+    /// `Active` (not Revoked or Completed) and the contract must not be paused.
+    /// All vesting parameters and `claimed_amount` are preserved — the new
+    /// beneficiary inherits exactly where the schedule left off.
+    ///
+    /// Updates both `BeneficiarySchedules` index entries atomically:
+    /// - Removes `schedule_id` from `old_beneficiary`'s list.
+    /// - Appends `schedule_id` to `new_beneficiary`'s list.
+    ///
+    /// Emits `("benXfer",)` → `(schedule_id, old_beneficiary, new_beneficiary)`.
+    pub fn transfer_beneficiary(env: Env, schedule_id: u64, new_beneficiary: Address) {
+        Self::bump_instance(&env);
+        Self::require_not_paused(&env);
+
+        let mut schedule: VestingSchedule = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Schedule(schedule_id))
+            .unwrap_or_else(|| panic_with_error!(&env, VestingError::ScheduleNotFound));
+
+        if schedule.status != ScheduleStatus::Active {
+            panic_with_error!(&env, VestingError::ScheduleNotActive);
+        }
+
+        // Current beneficiary must authorise the transfer.
+        schedule.beneficiary.require_auth();
+        let old_beneficiary = schedule.beneficiary.clone();
+
+        // ── Effects ──────────────────────────────────────────────────────────
+        // 1. Update schedule record.
+        schedule.beneficiary = new_beneficiary.clone();
+        env.storage()
+            .persistent()
+            .set(&DataKey::Schedule(schedule_id), &schedule);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Schedule(schedule_id),
+            PERSISTENT_BUMP_THRESHOLD,
+            PERSISTENT_BUMP_LEDGERS,
+        );
+
+        // 2. Remove schedule_id from old beneficiary's index.
+        let mut old_ids: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::BeneficiarySchedules(old_beneficiary.clone()))
+            .unwrap_or(Vec::new(&env));
+        if let Some(pos) = old_ids.iter().position(|id| id == schedule_id) {
+            old_ids.remove(pos as u32);
+        }
+        env.storage().persistent().set(
+            &DataKey::BeneficiarySchedules(old_beneficiary.clone()),
+            &old_ids,
+        );
+        env.storage().persistent().extend_ttl(
+            &DataKey::BeneficiarySchedules(old_beneficiary.clone()),
+            PERSISTENT_BUMP_THRESHOLD,
+            PERSISTENT_BUMP_LEDGERS,
+        );
+
+        // 3. Append schedule_id to new beneficiary's index.
+        let mut new_ids: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::BeneficiarySchedules(new_beneficiary.clone()))
+            .unwrap_or(Vec::new(&env));
+        new_ids.push_back(schedule_id);
+        env.storage().persistent().set(
+            &DataKey::BeneficiarySchedules(new_beneficiary.clone()),
+            &new_ids,
+        );
+        env.storage().persistent().extend_ttl(
+            &DataKey::BeneficiarySchedules(new_beneficiary.clone()),
+            PERSISTENT_BUMP_THRESHOLD,
+            PERSISTENT_BUMP_LEDGERS,
+        );
+
+        env.events().publish(
+            (EVT_BEN_XFER,),
+            (schedule_id, old_beneficiary, new_beneficiary),
+        );
     }
 
     // ── Read functions ─────────────────────────────────────────────────────
