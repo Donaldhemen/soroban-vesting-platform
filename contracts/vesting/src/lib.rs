@@ -437,6 +437,25 @@ impl VestingContract {
         (Self::vested_amount(&schedule, now) - schedule.claimed_amount).max(0)
     }
 
+    /// Returns the projected claimable amount for a schedule at an arbitrary
+    /// `timestamp`, without waiting for that ledger.
+    ///
+    /// Useful for dashboards that want to show future vesting projections.
+    /// Computes `vested_amount(timestamp) − claimed_amount`, clamped to 0.
+    ///
+    /// Read-only — does **not** bump the instance or persistent TTL.
+    ///
+    /// # Panics
+    /// - [`VestingError::ScheduleNotFound`] — schedule ID does not exist.
+    pub fn get_claimable_at(env: Env, schedule_id: u64, timestamp: u64) -> i128 {
+        let schedule: VestingSchedule = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Schedule(schedule_id))
+            .unwrap_or_else(|| panic_with_error!(&env, VestingError::ScheduleNotFound));
+        (Self::vested_amount(&schedule, timestamp) - schedule.claimed_amount).max(0)
+    }
+
     pub fn get_beneficiary_schedules(env: Env, beneficiary: Address) -> Vec<u64> {
         env.storage()
             .persistent()
