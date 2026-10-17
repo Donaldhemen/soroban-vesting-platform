@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added — 2026-10-17
+
+- backend/src/services/stellar.js: `validateStellarAddress(addr)` helper (#132).
+  Wraps `StrKey.isValidEd25519PublicKey()` from `@stellar/stellar-sdk` and
+  returns `true` only for valid 56-character `G...` Stellar public keys.
+  Applied to every address field on the mutating routes: `POST
+  /api/vesting/schedule` (`from`, `beneficiary`, `tokenAddress`), `POST
+  /api/vesting/claim` (`beneficiary`), `POST /api/vesting/revoke`
+  (`recipient`), `POST /api/token/mint` (`to`), `POST /api/token/transfer`
+  (`from`, `to`), `POST /api/multisig/proposal` (`proposer`), and `POST
+  /api/multisig/confirm` (`owner`). Invalid addresses now return HTTP 400
+  with `{ error: 'invalid Stellar address: <field>' }` instead of a 500
+  from the SDK. New tests in `vesting.test.js`, `token.test.js`, and
+  `multisig.test.js` cover invalid address inputs.
+
 ### Tests — 2026-10-17
 
 - contracts/vesting/src/lib.rs: `test_revoke_after_full_claim_no_beneficiary_transfer`
